@@ -68,6 +68,13 @@ function! Tex_MathCal()
 	endif
 endfunction
 " }}}
+
+" Tex_BoldSymbol: encloses te previous letter/number in \boldsymbol{} {{{
+" Description: 
+function! Tex_BoldSymbol()
+	return "\<Left>\\boldsymbol{\<Right>}"
+endfunction " }}}
+
 " Tex_LeftRight: maps <M-l> in insert mode. {{{
 " Description:
 " This is a polymorphic function, which maps the behaviour of <M-l> in the
@@ -124,10 +131,12 @@ endfunction " }}}
 inoremap <silent> <Plug>Tex_MathBF      <C-r>=Tex_MathBF()<CR>
 inoremap <silent> <Plug>Tex_MathRM      <C-r>=Tex_MathRM()<CR>
 inoremap <silent> <Plug>Tex_MathCal     <C-r>=Tex_MathCal()<CR>
+inoremap <silent> <Plug>Tex_BoldSymbol  <C-r>=Tex_BoldSymbol()<CR>
 inoremap <silent> <Plug>Tex_LeftRight   <C-r>=Tex_LeftRight()<CR>
 vnoremap <silent> <Plug>Tex_MathBF		<C-C>`>a}<Esc>`<i\mathbf{<Esc>
 vnoremap <silent> <Plug>Tex_MathRM		<C-C>`>a}<Esc>`<i\mathrm{<Esc>
 vnoremap <silent> <Plug>Tex_MathCal		<C-C>`>a}<Esc>`<i\mathcal{<Esc>
+vnoremap <silent> <Plug>Tex_BoldSymbol  <C-C>`>a}<Esc>`<i\boldsymbol{<Esc>
 nnoremap <silent> <Plug>Tex_LeftRight	:call Tex_PutLeftRight()<CR>
 
 " }}}
@@ -137,10 +146,12 @@ function! <SID>Tex_SetBracketingMaps()
 	call Tex_MakeMap('<M-b>', '<Plug>Tex_MathBF', 'i', '<buffer> <silent>')
 	call Tex_MakeMap('<M-m>', '<Plug>Tex_MathRM', 'i', '<buffer> <silent>')
 	call Tex_MakeMap('<M-c>', '<Plug>Tex_MathCal', 'i', '<buffer> <silent>')
+	call Tex_MakeMap('<M-s>', '<Plug>Tex_BoldSymbol', 'i', '<buffer> <silent>')
 	call Tex_MakeMap('<M-l>', '<Plug>Tex_LeftRight', 'i', '<buffer> <silent>')
 	call Tex_MakeMap('<M-b>', '<Plug>Tex_MathBF', 'v', '<buffer> <silent>')
 	call Tex_MakeMap('<M-m>', '<Plug>Tex_MathRM', 'v', '<buffer> <silent>')
 	call Tex_MakeMap('<M-c>', '<Plug>Tex_MathCal', 'v', '<buffer> <silent>')
+	call Tex_MakeMap('<M-s>', '<Plug>Tex_BoldSymbol', 'v', '<buffer> <silent>')
 	call Tex_MakeMap('<M-l>', '<Plug>Tex_LeftRight', 'n', '<buffer> <silent>')
 
 endfunction
