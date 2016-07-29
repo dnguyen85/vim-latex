@@ -314,6 +314,19 @@ fun! Tex_Strntok(s, tok, n)
 endfun
 
 " }}}
+" Tex_CountMatches: count number of matches of pat in string {{{
+fun! Tex_CountMatches( string, pat )
+	let pos = 0
+	let cnt = 0
+	while pos >= 0
+		let pos = matchend(a:string, a:pat, pos)
+		let cnt = cnt + 1
+	endwhile
+	" We have counted one match to much
+	return cnt - 1
+endfun
+
+" }}}
 " Tex_CreatePrompt: creates a prompt string {{{
 " Description: 
 " Arguments:
@@ -329,9 +342,8 @@ endfun
 "
 " This string can be used in the input() function.
 function! Tex_CreatePrompt(promptList, cols, sep)
-
-	let g:listSep = a:sep
-	let num_common = GetListCount(a:promptList)
+	" There is one more item than matches of the seperator
+	let num_common = Tex_CountMatches( a:promptList, a:sep ) + 1
 
 	let i = 1
 	let promptStr = ""
@@ -412,7 +424,7 @@ function! Tex_GetMainFileName(...)
 		return retval
 	endif
 
-	let s:origdir = fnameescape(getcwd())
+	let l:origdir = fnameescape(getcwd())
 
 	let dirmodifier = '%:p:h'
 	let dirLast = fnameescape(expand(dirmodifier))
@@ -443,7 +455,7 @@ function! Tex_GetMainFileName(...)
 		let lheadfile = expand('%'.modifier)
 	endif
 
-	exe 'cd '.s:origdir
+	exe 'cd '.l:origdir
 
 	" NOTE: The caller of this function needs to escape the file name with
 	"       fnameescape() . The reason its not done here is that escaping is not
@@ -458,41 +470,15 @@ endfunction
 function! Tex_ChooseFromPrompt(dialog, list, sep)
 	let g:Tex_ASDF = a:dialog
 	let inp = input(a:dialog)
+	" This is a workaround for a bug(?) in vim, see
+	" https://github.com/vim/vim/issues/778
+	redraw
 	if inp =~ '\d\+'
 		return Tex_Strntok(a:list, a:sep, inp)
 	else
 		return inp
 	endif
 endfunction " }}}
-" Tex_ChooseFile: produces a file list and prompts for choice {{{
-" Description: 
-function! Tex_ChooseFile(dialog)
-	let files = glob('*')
-	if files == ''
-		return ''
-	endif
-	let s:incnum = 0
-	echo a:dialog
-	let filenames = substitute(files, "\\v(^|\n)", "\\=submatch(0).Tex_IncrementNumber(1).' : '", 'g')
-	echo filenames
-	let choice = input('Enter Choice : ')
-	let g:choice = choice
-	if choice == ''
-		return ''
-	endif
-	if choice =~ '^\s*\d\+\s*$'
-		let retval = Tex_Strntok(files, "\n", choice)
-	else
-		let filescomma = substitute(files, "\n", ",", "g")
-		let retval = GetListMatchItem(filescomma, choice)
-	endif
-	if retval == ''
-		return ''
-	endif
-	return retval
-endfunction 
-
-" }}}
 " Tex_IncrementNumber: returns an incremented number each time {{{
 " Description: 
 let s:incnum = 0
@@ -569,7 +555,7 @@ function! Tex_GetErrorList()
 	let _a = @a
 	redir @a | silent! clist | redir END
 	let errlist = @a
-	let @a = _a
+	call setreg("a", _a, "c")
 
 	if errlist =~ 'E42: '
 		let errlist = ''
@@ -583,7 +569,7 @@ endfunction " }}}
 "              us to create temporary files in a specified directory.
 function! Tex_GetTempName(dirname)
 	let prefix = 'latexSuiteTemp'
-	let slash = (a:dirname =~ '\\\|/$' ? '' : '/')
+	let slash = (a:dirname =~ '\\$\|/$' ? '' : '/')
 	let i = 0
 	while filereadable(a:dirname.slash.prefix.i.'.tex') && i < 1000
 		let i = i + 1
@@ -805,6 +791,24 @@ if g:Tex_SmartKeyDot
 endif
 " }}}
 
+
+" Python detection: Tex_UsePython(), Tex_HasPython, Tex_Python[File]Cmd {{{
+if has('python3')
+	let g:Tex_HasPython = 3
+	let g:Tex_PythonCmd = 'python3'
+	let g:Tex_PythonFileCmd = 'py3file'
+elseif has('python')
+	let g:Tex_HasPython = 2
+	let g:Tex_PythonCmd = 'python'
+	let g:Tex_PythonFileCmd = 'pyfile'
+else
+	let g:Tex_HasPython = 0
+end
+function! Tex_UsePython()
+	return g:Tex_HasPython && Tex_GetVarValue('Tex_UsePython')
+endfunction
+" }}}
+
 " source texproject.vim before other files
 exe 'source '.fnameescape(s:path.'/texproject.vim')
 
@@ -941,10 +945,10 @@ function! Tex_GotoTempFile()
 	endif
 	exec 'silent! split '.s:tempFileName
 endfunction " }}}
-" Tex_IsPresentInFile: finds if a string str, is present in filename {{{
-if has('python') && g:Tex_UsePython
+" Tex_IsPresentInFile: finds if a regexp, is present in filename {{{
+if Tex_UsePython()
 	function! Tex_IsPresentInFile(regexp, filename)
-		exec 'python isPresentInFile(r"'.a:regexp.'", r"'.a:filename.'")'
+		exec g:Tex_PythonCmd . ' isPresentInFile(r"'.a:regexp.'", r"'.a:filename.'")'
 
 		return retval
 	endfunction
@@ -961,7 +965,8 @@ else
 		let &report = _report
 		let &sc = _sc
 
-		if search(a:regexp, 'w')
+		" Use very magic to digest usual regular expressions.
+		if search('\v' . a:regexp, 'w')
 			let retval = 1
 		else
 			let retval = 0
@@ -971,14 +976,17 @@ else
 	endfunction
 endif " }}}
 " Tex_CatFile: returns the contents of a file in a <NL> seperated string {{{
-if has('*readfile')
+if exists('*readfile')
 	function! Tex_CatFile(filename)
-		return join(readfile(filename), "\n")
+		if glob(a:filename) == ''
+			return ''
+		endif
+		return join(readfile(a:filename), "\n")
 	endfunction
-elseif has('python') && g:Tex_UsePython
+elseif Tex_UsePython()
 	function! Tex_CatFile(filename)
 		" catFile assigns a value to retval
-		exec 'python catFile("'.a:filename.'")'
+		exec g:Tex_PythonCmd . ' catFile("'.a:filename.'")'
 
 		return retval
 	endfunction
@@ -1001,7 +1009,7 @@ else
 		let _a = @a
 		silent! normal! ggVG"ay
 		let retval = @a
-		let @a = _a
+		call setreg("a", _a, "c")
 
 		silent! bd
 		let &report = _report
@@ -1012,9 +1020,9 @@ endif
 " }}}
 " Tex_DeleteFile: removes a file if present {{{
 " Description: 
-if has('python') && g:Tex_UsePython
+if Tex_UsePython()
 	function! Tex_DeleteFile(filename)
-		exec 'python deleteFile(r"'.a:filename.'")'
+		exec g:Tex_PythonCmd . ' deleteFile(r"'.a:filename.'")'
 		
 		if exists('retval')
 			return retval
@@ -1033,10 +1041,8 @@ endif
 let &cpo = s:save_cpo
 
 " Define the functions in python if available.
-if !has('python') || !g:Tex_UsePython
-	finish
+if Tex_UsePython()
+	exec g:Tex_PythonFileCmd . ' ' . fnameescape(expand('<sfile>:p:h')).'/pytools.py'
 endif
-
-exec 'pyfile '.fnameescape(expand('<sfile>:p:h')).'/pytools.py'
 
 " vim:fdm=marker:ff=unix:noet:ts=4:sw=4:nowrap
